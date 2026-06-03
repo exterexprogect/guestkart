@@ -1,386 +1,651 @@
-"""
-Сервер для парсинга Telegram-каналов с оповещениями
-Каналы: bplarussiaru, vrv_radar, locatorru
-"""
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Карта тревог РФ — Лучшая версия</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.4.0/ol.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; background: #0a0a0a; }
+        #map { width: 100vw; height: 100vh; background: #000; }
 
-import os
-import re
-import json
-import threading
-import time
-import requests
-import asyncio
-from datetime import datetime, timedelta, timezone
-from flask import Flask, jsonify
-from telethon import TelegramClient
-from telethon.sessions import StringSession
-from telethon.errors import FloodWaitError
-
-# ==================== ДАННЫЕ ====================
-
-API_ID = 36681063
-API_HASH = 'eb514964af008d72c77125505d1dd4e5'
-SESSION_STRING = '1ApWapzMBu2J3EQeu6RTRd1uAts3cvH4w5wTrxabI1ADnBTmD8dDatRzuHhVKp9EPlrFfHaVD8QKnWedLYN-MBXAEqMX7_odM4t5BMF6uotn5s-Ge99Xt2rowBLHy8ic2_NE_oE8xlZxJPaPZKBvRfITh42D-PGA3vlwZKoq9nf4xdPg1slXEs6nEU8RKAxTQPFAoAIlMHI1bDUg-u1Y7Gj5vNm8GgXB7UipxKkJ-X_Yt3ByLowAzAywmtbh_z7xfEqiy7WcBqfJtIvsBIio8Na33FjGHZjRrS2SCAe6RppDt98J4UDY_0z9PPodRqjSlGqT65W1ICc9uyxKiVdtitm76rH99vDM='
-
-app = Flask(__name__)
-
-@app.after_request
-def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    return response
-
-# Настройки каналов
-CHANNEL_MAIN = "bplarussiaru"
-CHANNEL_SECOND = "vrv_radar"
-CHANNEL_BACKUP = "locatorru"
-REPORT_CHANNEL = "xTeamRadaa"
-BOT_SIGNATURE = "@radarrf — радар рф"
-
-# ==================== СТАТУСЫ И ЦВЕТА (КАК ВЫ ПРОСИЛИ) ====================
-
-STATUS_CONFIG = {
-    "missile_danger": {
-        "priority": 0,
-        "color": "#800000",      # БОРДОВЫЙ
-        "name": "Ракетная опасность",
-        "type": "danger",
-        "emoji": "⚠️"
-    },
-    "drone_attack": {
-        "priority": 1,
-        "color": "#ff0000",      # КРАСНЫЙ (внимание бпла)
-        "name": "Внимание БПЛА",
-        "type": "danger",
-        "emoji": "🛸"
-    },
-    "drone_danger": {
-        "priority": 2,
-        "color": "#ffcc00",      # ЖЁЛТЫЙ (опасность бпла)
-        "name": "Опасность БПЛА",
-        "type": "warning",
-        "emoji": "⚠️"
-    },
-    "clear": {
-        "priority": 3,
-        "color": "#808080",      # СЕРЫЙ (отбой)
-        "name": "Отбой",
-        "type": "safe",
-        "emoji": "✅"
-    }
-}
-
-# Данные
-region_statuses = {}
-alert_history = []
-last_msg_ids = {"main": 0, "second": 0, "backup": 0}
-STATE_FILE = "/tmp/radar_state.json"
-telegram_client = None
-
-# ==================== РАСПОЗНАВАНИЕ РЕГИОНОВ ====================
-
-CITY_REGION_MAPPING = {
-    "Москва": "Москва", "Московская область": "Московская область",
-    "Санкт-Петербург": "Санкт-Петербург", "Ленинградская область": "Ленинградская область",
-    "Тула": "Тульская область", "Калуга": "Калужская область",
-    "Рязань": "Рязанская область", "Тверь": "Тверская область",
-    "Воронеж": "Воронежская область", "Белгород": "Белгородская область",
-    "Брянск": "Брянская область", "Курск": "Курская область",
-    "Смоленск": "Смоленская область", "Орёл": "Орловская область",
-    "Липецк": "Липецкая область", "Тамбов": "Тамбовская область",
-    "Владимир": "Владимирская область", "Иваново": "Ивановская область",
-    "Ярославль": "Ярославская область", "Кострома": "Костромская область",
-    "Нижний Новгород": "Нижегородская область", "Киров": "Кировская область",
-    "Пенза": "Пензенская область", "Ульяновск": "Ульяновская область",
-    "Саратов": "Саратовская область", "Самара": "Самарская область",
-    "Пермь": "Пермский край", "Уфа": "Республика Башкортостан",
-    "Казань": "Республика Татарстан", "Ижевск": "Республика Удмуртия",
-    "Краснодар": "Краснодарский край", "Сочи": "Краснодарский край",
-    "Ростов-на-Дону": "Ростовская область", "Волгоград": "Волгоградская область",
-    "Астрахань": "Астраханская область", "Ставрополь": "Ставропольский край",
-    "Челябинск": "Челябинская область", "Екатеринбург": "Свердловская область",
-    "Тюмень": "Тюменская область", "Омск": "Омская область",
-    "Новосибирск": "Новосибирская область", "Томск": "Томская область",
-    "Красноярск": "Красноярский край", "Иркутск": "Иркутская область",
-    "Владивосток": "Приморский край", "Хабаровск": "Хабаровский край",
-    "Донецк": "Донецкая Народная Республика", "Луганск": "Луганская Народная Республика",
-    "Запорожская область": "Запорожская область", "Херсонская область": "Херсонская область",
-}
-
-IGNORE_KEYWORDS = ["район", "р-н", "село", "деревня", "посёлок", "улица", "дом"]
-
-def extract_regions(text):
-    if not text:
-        return []
-    text_lower = text.lower()
-    for kw in IGNORE_KEYWORDS:
-        if kw in text_lower:
-            return []
-    found = set()
-    for city, region in CITY_REGION_MAPPING.items():
-        if city.lower() in text_lower:
-            found.add(region)
-    return list(found)
-
-# ==================== ОПРЕДЕЛЕНИЕ СТАТУСА ====================
-
-def detect_status(text):
-    text_lower = text.lower()
-    
-    # Отбой
-    if any(w in text_lower for w in ["отбой", "тихо", "спокойно", "отмена", "все спокойно"]):
-        return "clear"
-    
-    # Ракетная опасность (БОРДОВЫЙ)
-    if any(w in text_lower for w in ["ракетная тревога", "ракетная опасность", "воздушная тревога"]):
-        return "missile_danger"
-    
-    # Внимание БПЛА (КРАСНЫЙ) - атака, фиксация, сбитие
-    if any(w in text_lower for w in ["атака бпла", "фиксация бпла", "сбитие бпла", "группа бпла", "волна бпла", "тревога бпла"]):
-        return "drone_attack"
-    
-    # Опасность БПЛА (ЖЁЛТЫЙ)
-    if any(w in text_lower for w in ["опасность бпла", "угроза бпла", "внимание по бпла"]):
-        return "drone_danger"
-    
-    return None
-
-# ==================== ФИЛЬТРАЦИЯ ====================
-
-SPAM_KEYWORDS = ["24/7", "АВАНС", "вакансия", "Пятёрочка", "@radarrussiia"]
-
-def is_spam(text):
-    if not text:
-        return True
-    for kw in SPAM_KEYWORDS:
-        if kw in text:
-            return True
-    return False
-
-def clean_message(text):
-    if not text:
-        return ""
-    text = re.sub(r'https?://\S+', '', text)
-    text = re.sub(r'@\w+', '', text)
-    return text.strip()
-
-# ==================== СООБЩЕНИЯ В TELEGRAM ====================
-
-REGION_SHORT = {
-    "Московская область": "МО", "Ленинградская область": "ЛО",
-    "Краснодарский край": "КК", "Пермский край": "ПК",
-    "Донецкая Народная Республика": "ДНР", "Луганская Народная Республика": "ЛНР",
-}
-
-def format_alert_message(region, status):
-    cfg = STATUS_CONFIG.get(status, {})
-    status_name = cfg.get("name", status)
-    emoji = cfg.get("emoji", "⚠️")
-    region_short = REGION_SHORT.get(region, region)
-    time_str = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%H:%M")
-    
-    return f"{emoji} {status_name} {emoji}\n\n📍 {region_short}\n\n🕐 {time_str}\n\n---\n{BOT_SIGNATURE}"
-
-async def send_alert(region, status, source):
-    global telegram_client
-    if not telegram_client:
-        return
-    try:
-        channel = await telegram_client.get_entity(REPORT_CHANNEL)
-        await telegram_client.send_message(channel, format_alert_message(region, status))
-        print(f"[SENT] {region} -> {status}")
-    except Exception as e:
-        print(f"[ERROR] {e}")
-
-# ==================== ОБРАБОТКА ====================
-
-def process_message(message_text, msg_id, source, msg_date=None):
-    global region_statuses, alert_history
-    
-    if not message_text or is_spam(message_text):
-        return False
-    
-    cleaned = clean_message(message_text)
-    if len(cleaned) < 10:
-        return False
-    
-    status = detect_status(cleaned)
-    if not status:
-        return False
-    
-    regions = extract_regions(cleaned)
-    if not regions:
-        return False
-    
-    timestamp = datetime.now(timezone.utc).isoformat()
-    updated = False
-    
-    for region in regions:
-        current = region_statuses.get(region, {}).get("status")
-        if current == status:
-            continue
-        
-        # Проверка приоритета
-        current_priority = STATUS_CONFIG.get(current, {}).get("priority", 99)
-        new_priority = STATUS_CONFIG.get(status, {}).get("priority", 99)
-        
-        if current and new_priority > current_priority:
-            continue  # Новый статус менее приоритетный
-        
-        region_statuses[region] = {"status": status, "last_update": timestamp, "source": source}
-        updated = True
-        asyncio.create_task(send_alert(region, status, source))
-    
-    if updated:
-        alert_history.append({"region": region, "status": status, "timestamp": timestamp})
-        if len(alert_history) > 500:
-            alert_history.pop(0)
-        save_state()
-    
-    return updated
-
-# ==================== API (С НУЖНЫМИ ЦВЕТАМИ) ====================
-
-@app.route("/api/statuses")
-def api_statuses():
-    """Возвращает статусы регионов с цветами"""
-    result = {}
-    
-    for region, data in region_statuses.items():
-        status = data.get("status", "clear")
-        config = STATUS_CONFIG.get(status, STATUS_CONFIG["clear"])
-        
-        result[region] = {
-            "status": status,
-            "status_name": config["name"],
-            "color": config["color"],
-            "type": config["type"],
-            "priority": config["priority"],
-            "last_update": data.get("last_update"),
-            "source": data.get("source", "unknown")
+        .orbit-clock {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1100;
+            background: transparent;
+            font-family: 'Orbitron', monospace;
+            text-align: center;
+            pointer-events: none;
+            text-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
+        .orbit-time { font-size: 36px; font-weight: 700; color: #ffffff; letter-spacing: 3px; line-height: 1; }
+        .orbit-date { font-size: 12px; font-weight: 400; color: #aaaaaa; letter-spacing: 1px; margin-top: 5px; }
+
+        .legend-summary-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 320px;
+            max-height: calc(100vh - 100px);
+            background: rgba(10, 15, 25, 0.75);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            pointer-events: auto;
+            font-size: 12px;
+        }
+        .legend-header {
+            padding: 12px 18px;
+            font-weight: bold;
+            font-size: 13px;
+            color: #fff;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .legend-toggle { font-size: 14px; transition: transform 0.2s; }
+        .legend-items {
+            padding: 12px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .legend-item { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #ddd; }
+        .color-box { width: 20px; height: 20px; border-radius: 4px; }
+        .color-clear { background: #2a2a2a; border: 1px solid #555; }
+        .color-danger { background: #cc9900; border: 1px solid #ffdd66; }
+        .color-attack { background: #cc0000; border: 1px solid #ff6666; }
+        .color-missile { background: #800020; border: 1px solid #ff8888; }
+
+        .summary-header {
+            padding: 12px 18px;
+            font-weight: bold;
+            font-size: 13px;
+            color: #fff;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .summary-arrow { font-size: 14px; transition: transform 0.2s; }
+        .summary-content {
+            padding: 12px 16px;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+        .summary-content.collapsed { display: none; }
+        .summary-content::-webkit-scrollbar { width: 4px; }
+        .summary-content::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 10px; }
+        .summary-content::-webkit-scrollbar-thumb { background: #ffaa55; border-radius: 10px; }
+        .summary-time {
+            font-size: 10px;
+            color: #aaa;
+            text-align: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            font-family: monospace;
+        }
+        .threat-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: bold;
+            font-size: 12px;
+            border-left: 3px solid #ff4444;
+            padding-left: 10px;
+            margin-bottom: 6px;
+            color: #ffcccc;
+        }
+        .region-list-block {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            margin-left: 16px;
+            margin-bottom: 12px;
+        }
+        .region-line {
+            font-size: 11px;
+            color: #ffdd99;
+            display: block;
+            line-height: 1.35;
+            cursor: pointer;
+            transition: 0.1s;
+        }
+        .region-line:hover { color: #ffffff; text-shadow: 0 0 3px #ffaa55; }
+        .sub-header { font-size: 11px; font-weight: 600; color: #ffaa66; margin: 8px 0 4px 0; }
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 6px 0;
+            border-radius: 40px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 11px;
+            margin-top: 12px;
+            width: 100%;
+        }
+        .copy-btn:hover { background: rgba(255, 255, 255, 0.2); }
+        .empty-message { color: #aaa; font-style: italic; font-size: 11px; padding: 6px 0; }
+
+        .ol-popup {
+            background: rgba(10,15,25,0.9);
+            backdrop-filter: blur(16px);
+            border-radius: 16px;
+            border-left: 4px solid #ff4444;
+            color: #f0f0f0;
+            padding: 12px;
+            min-width: 200px;
+            pointer-events: auto;
+            position: absolute;
+        }
+        .popup-closer {
+            float: right;
+            font-size: 18px;
+            color: #aaa;
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="orbit-clock">
+    <div class="orbit-time" id="orbitTime">--:--</div>
+    <div class="orbit-date" id="orbitDate"></div>
+</div>
+
+<div class="legend-summary-panel" id="legendSummaryPanel">
+    <div class="legend-header" id="legendHeader">
+        <span>🚨 ТИПЫ УГРОЗ</span>
+        <span class="legend-toggle" id="legendToggle">▼</span>
+    </div>
+    <div class="legend-items" id="legendItems">
+        <div class="legend-item"><div class="color-box color-clear"></div> Отбой / Спокойно</div>
+        <div class="legend-item"><div class="color-box color-danger"></div> 🟡 Опасность БПЛА</div>
+        <div class="legend-item"><div class="color-box color-attack"></div> 🔴 Тревога / Атака БПЛА</div>
+        <div class="legend-item"><div class="color-box color-missile"></div> 🚀 Ракетная опасность</div>
+    </div>
+
+    <div class="summary-header" id="summaryHeader">
+        <span>📜 СВОДКА УГРОЗ</span>
+        <span class="summary-arrow" id="summaryArrow">▼</span>
+    </div>
+    <div class="summary-content" id="summaryContent">
+        <div id="dynamicSummaryBlock"></div>
+        <div class="copy-btn" id="copySummaryBtn">📋 Копировать сводку</div>
+    </div>
+</div>
+
+<script>
+    // =============================================
+    // API
+    // =============================================
+    const API_URL = 'https://radar-n6y0.onrender.com/api/statuses';
     
-    return jsonify({
-        "regions": result,
-        "last_updated": datetime.now(timezone.utc).isoformat(),
-        "status_config": STATUS_CONFIG
-    })
+    const EXCLUDED_REGIONS = [
+        "Донецкая Народная Республика",
+        "Луганская Народная Республика",
+        "Запорожская область",
+        "Херсонская область",
+        "ДНР", "ЛНР"
+    ];
 
-@app.route("/api/recent_alerts")
-def api_recent_alerts():
-    return jsonify({"alerts": alert_history[-50:], "total": len(alert_history)})
+    const MONTHS_RU = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
-@app.route("/")
-def api_root():
-    return jsonify({
-        "status": "ok",
-        "regions_count": len(region_statuses),
-        "channels": [CHANNEL_MAIN, CHANNEL_SECOND, CHANNEL_BACKUP]
-    })
+    // ========== СООТВЕТСТВИЕ: Русское название (API) → Английское название (GeoJSON) ==========
+    const regionMap = {
+        "Брянская область": "Bryansk Oblast",
+        "Ростовская область": "Rostov Oblast",
+        "Белгородская область": "Belgorod Oblast",
+        "Воронежская область": "Voronezh Oblast",
+        "Курская область": "Kursk Oblast",
+        "Орловская область": "Oryol Oblast",
+        "Рязанская область": "Ryazan Oblast",
+        "Смоленская область": "Smolensk Oblast",
+        "Тамбовская область": "Tambov Oblast",
+        "Тверская область": "Tver Oblast",
+        "Тульская область": "Tula Oblast",
+        "Калужская область": "Kaluga Oblast",
+        "Владимирская область": "Vladimir Oblast",
+        "Ивановская область": "Ivanovo Oblast",
+        "Костромская область": "Kostroma Oblast",
+        "Ярославская область": "Yaroslavl Oblast",
+        "Липецкая область": "Lipetsk Oblast",
+        "Московская область": "Moscow Oblast",
+        "Москва": "Moscow",
+        "Ленинградская область": "Leningrad Oblast",
+        "Санкт-Петербург": "Saint Petersburg",
+        "Новгородская область": "Novgorod Oblast",
+        "Псковская область": "Pskov Oblast",
+        "Архангельская область": "Arkhangelsk Oblast",
+        "Мурманская область": "Murmansk Oblast",
+        "Вологодская область": "Vologda Oblast",
+        "Калининградская область": "Kaliningrad Oblast",
+        "Республика Карелия": "Republic of Karelia",
+        "Республика Коми": "Komi Republic",
+        "Волгоградская область": "Volgograd Oblast",
+        "Астраханская область": "Astrakhan Oblast",
+        "Краснодарский край": "Krasnodar Krai",
+        "Республика Адыгея": "Republic of Adygea",
+        "Республика Калмыкия": "Republic of Kalmykia",
+        "Республика Крым": "Republic of Crimea",
+        "Севастополь": "Sevastopol",
+        "Ставропольский край": "Stavropol Krai",
+        "Республика Дагестан": "Republic of Dagestan",
+        "Чеченская Республика": "Chechen Republic",
+        "Республика Ингушетия": "Republic of Ingushetia",
+        "Кабардино-Балкарская Республика": "Kabardino-Balkar Republic",
+        "Карачаево-Черкесская Республика": "Karachay-Cherkess Republic",
+        "Республика Северная Осетия": "Republic of North Ossetia",
+        "Республика Татарстан": "Republic of Tatarstan",
+        "Республика Башкортостан": "Republic of Bashkortostan",
+        "Удмуртская Республика": "Udmurt Republic",
+        "Чувашская Республика": "Chuvash Republic",
+        "Республика Марий Эл": "Mari El Republic",
+        "Республика Мордовия": "Republic of Mordovia",
+        "Самарская область": "Samara Oblast",
+        "Саратовская область": "Saratov Oblast",
+        "Нижегородская область": "Nizhny Novgorod Oblast",
+        "Пензенская область": "Penza Oblast",
+        "Ульяновская область": "Ulyanovsk Oblast",
+        "Кировская область": "Kirov Oblast",
+        "Пермский край": "Perm Krai",
+        "Оренбургская область": "Orenburg Oblast",
+        "Свердловская область": "Sverdlovsk Oblast",
+        "Челябинская область": "Chelyabinsk Oblast",
+        "Курганская область": "Kurgan Oblast",
+        "Тюменская область": "Tyumen Oblast",
+        "Омская область": "Omsk Oblast",
+        "Новосибирская область": "Novosibirsk Oblast",
+        "Томская область": "Tomsk Oblast",
+        "Кемеровская область": "Kemerovo Oblast",
+        "Иркутская область": "Irkutsk Oblast",
+        "Красноярский край": "Krasnoyarsk Krai",
+        "Алтайский край": "Altai Krai",
+        "Республика Алтай": "Altai Republic",
+        "Республика Хакасия": "Republic of Khakassia",
+        "Республика Тыва": "Tuva Republic",
+        "Республика Бурятия": "Republic of Buryatia",
+        "Хабаровский край": "Khabarovsk Krai",
+        "Приморский край": "Primorsky Krai",
+        "Амурская область": "Amur Oblast",
+        "Сахалинская область": "Sakhalin Oblast",
+        "Камчатский край": "Kamchatka Krai",
+        "Магаданская область": "Magadan Oblast",
+        "Забайкальский край": "Zabaykalsky Krai",
+        "Еврейская АО": "Jewish Autonomous Oblast",
+        "Чукотский АО": "Chukotka Autonomous Okrug"
+    };
 
-# ==================== СОХРАНЕНИЕ ====================
+    function getGeoJsonName(apiName) {
+        return regionMap[apiName] || apiName;
+    }
 
-def save_state():
-    try:
-        with open(STATE_FILE, "w") as f:
-            json.dump({"region_statuses": region_statuses, "last_msg_ids": last_msg_ids}, f)
-    except:
-        pass
+    function getCurrentTimeParts() {
+        const now = new Date();
+        const msk = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+        const hours = msk.getHours().toString().padStart(2, '0');
+        const minutes = msk.getMinutes().toString().padStart(2, '0');
+        const day = msk.getDate().toString().padStart(2, '0');
+        const month = (msk.getMonth() + 1).toString().padStart(2, '0');
+        const monthName = MONTHS_RU[msk.getMonth()];
+        const year = msk.getFullYear();
+        return { time: `${hours}:${minutes}`, day, month, monthName, year };
+    }
 
-def load_state():
-    global region_statuses, last_msg_ids
-    try:
-        if os.path.exists(STATE_FILE):
-            with open(STATE_FILE, "r") as f:
-                data = json.load(f)
-                region_statuses = data.get("region_statuses", {})
-                last_msg_ids = data.get("last_msg_ids", {"main": 0, "second": 0, "backup": 0})
-    except:
-        pass
+    function getFullDateForSummary() {
+        const { time, day, month } = getCurrentTimeParts();
+        return `${time} | ${day}.${month}`;
+    }
 
-# ==================== ПАРСЕР ====================
+    function getFullDateForClock() {
+        const { day, monthName, year } = getCurrentTimeParts();
+        return `${day} ${monthName} ${year}`;
+    }
 
-async def monitor_channel(channel_name, source_key, is_backup=False):
-    global last_msg_ids
-    try:
-        channel = await telegram_client.get_entity(channel_name)
-        print(f"[MONITOR] Started {channel_name}")
-    except Exception as e:
-        print(f"[ERROR] {channel_name}: {e}")
-        return
+    let regionStatuses = new Map();
     
-    while True:
-        try:
-            messages = await telegram_client.get_messages(channel, limit=20)
-            if messages:
-                for msg in reversed(messages):
-                    if msg.id > last_msg_ids.get(source_key, 0):
-                        last_msg_ids[source_key] = msg.id
-                        if msg.message:
-                            process_message(msg.message, msg.id, source_key)
-            await asyncio.sleep(30 if not is_backup else 60)
-        except FloodWaitError as e:
-            await asyncio.sleep(e.seconds)
-        except Exception as e:
-            print(f"[ERROR] {channel_name}: {e}")
-            await asyncio.sleep(30)
-
-async def monitor_all():
-    await asyncio.gather(
-        monitor_channel(CHANNEL_MAIN, "main", False),
-        monitor_channel(CHANNEL_SECOND, "second", False),
-        monitor_channel(CHANNEL_BACKUP, "backup", True),
-    )
-
-# ==================== ЗАЩИТА ОТ ЗАСЫПАНИЯ ====================
-
-def keep_alive():
-    """Пингует свой API через внешний URL"""
-    url = "https://radar-n6y0.onrender.com/api/statuses"
-    while True:
-        time.sleep(240)
-        try:
-            requests.get(url, timeout=10)
-            print(f"[PING] {datetime.now().strftime('%H:%M:%S')}")
-        except:
-            pass
-
-def run_flask():
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
-
-# ==================== ЗАПУСК ====================
-
-async def main():
-    global telegram_client
+    function getRegionStatus(geoJsonName) {
+        return regionStatuses.get(geoJsonName) || 'clear';
+    }
     
-    print("="*50)
-    print("🚀 RADAR BOT")
-    print("="*50)
-    print(f"📡 Channels: {CHANNEL_MAIN}, {CHANNEL_SECOND}, {CHANNEL_BACKUP}")
-    print(f"📢 Report: {REPORT_CHANNEL}")
-    print("="*50)
-    print("🎨 Цвета статусов:")
-    for status, cfg in STATUS_CONFIG.items():
-        print(f"   {cfg['name']}: {cfg['color']}")
-    print("="*50)
-    
-    telegram_client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
-    await telegram_client.start()
-    print("✅ Connected")
-    
-    load_state()
-    print(f"📊 Loaded {len(region_statuses)} regions")
-    
-    asyncio.create_task(monitor_all())
-    threading.Thread(target=run_flask, daemon=True).start()
-    threading.Thread(target=keep_alive, daemon=True).start()
-    
-    print("✅ Running!")
-    
-    while True:
-        await asyncio.sleep(1)
+    async function fetchAlerts() {
+        try {
+            console.log("Загрузка данных с API...");
+            const resp = await fetch(API_URL);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const apiData = await resp.json();
+            
+            if (apiData && apiData.regions) {
+                regionStatuses.clear();
+                for (const [apiRegionName, info] of Object.entries(apiData.regions)) {
+                    if (EXCLUDED_REGIONS.includes(apiRegionName)) continue;
+                    let status = info.status || 'clear';
+                    const geoJsonName = getGeoJsonName(apiRegionName);
+                    regionStatuses.set(geoJsonName, status);
+                    console.log(`✅ ${apiRegionName} -> ${geoJsonName} = ${status}`);
+                }
+                updateAllLayers();
+                renderFullSummary();
+            }
+        } catch (err) { console.error('Ошибка API:', err); }
+    }
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    // ========== КАРТА ==========
+    const map = new ol.Map({
+        target: 'map',
+        layers: [
+            new ol.layer.Tile({ source: new ol.source.XYZ({ url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', subdomains: 'abcd' }) })
+        ],
+        view: new ol.View({
+            center: ol.proj.fromLonLat([60, 65]),
+            zoom: 4,
+            minZoom: 3,
+            maxZoom: 10,
+            constrainRotation: true,
+            enableRotation: false
+        }),
+        controls: []
+    });
+
+    let clearSource = new ol.source.Vector();
+    let dangerSource = new ol.source.Vector();
+    let attackSource = new ol.source.Vector();
+    let missileSource = new ol.source.Vector();
+
+    const clearStyle = new ol.style.Style({
+        fill: new ol.style.Fill({ color: 'rgba(42, 42, 42, 0.6)' }),
+        stroke: new ol.style.Stroke({ color: '#555555', width: 1.5 })
+    });
+    
+    const dangerStyle = new ol.style.Style({
+        fill: new ol.style.Fill({ color: 'rgba(204, 153, 0, 0.65)' }),
+        stroke: new ol.style.Stroke({ color: '#cc9900', width: 2 })
+    });
+    
+    const attackStyle = new ol.style.Style({
+        fill: new ol.style.Fill({ color: 'rgba(204, 0, 0, 0.7)' }),
+        stroke: new ol.style.Stroke({ color: '#cc0000', width: 2 })
+    });
+    
+    const missileStyle = new ol.style.Style({
+        fill: new ol.style.Fill({ color: 'rgba(128, 0, 32, 0.75)' }),
+        stroke: new ol.style.Stroke({ color: '#800020', width: 2.2 })
+    });
+
+    const clearLayer = new ol.layer.Vector({ source: clearSource, style: clearStyle, zIndex: 5 });
+    const dangerLayer = new ol.layer.Vector({ source: dangerSource, style: dangerStyle, zIndex: 6 });
+    const attackLayer = new ol.layer.Vector({ source: attackSource, style: attackStyle, zIndex: 7 });
+    const missileLayer = new ol.layer.Vector({ source: missileSource, style: missileStyle, zIndex: 8 });
+
+    map.addLayer(clearLayer);
+    map.addLayer(dangerLayer);
+    map.addLayer(attackLayer);
+    map.addLayer(missileLayer);
+
+    const labelSource = new ol.source.Vector();
+    const labelLayer = new ol.layer.Vector({
+        source: labelSource,
+        style: (feature) => {
+            const zoom = map.getView().getZoom();
+            let name = feature.get('name');
+            if (!name || zoom < 3) return new ol.style.Style();
+            
+            const ruNames = {
+                "Bryansk Oblast": "Брянская обл.",
+                "Rostov Oblast": "Ростовская обл.",
+                "Moscow Oblast": "Московская обл.",
+                "Moscow": "Москва",
+                "Saint Petersburg": "СПб",
+                "Republic of Tatarstan": "Татарстан",
+                "Perm Krai": "Пермский кр.",
+                "Krasnodar Krai": "Краснодарский кр."
+            };
+            const displayName = ruNames[name] || name;
+            const fontSize = zoom < 5 ? '10px' : '12px';
+            
+            return new ol.style.Style({
+                text: new ol.style.Text({
+                    text: displayName,
+                    font: `500 ${fontSize} "Segoe UI"`,
+                    fill: new ol.style.Fill({ color: '#ffffff' }),
+                    stroke: new ol.style.Stroke({ color: '#000000', width: 2.5 }),
+                    textAlign: 'center',
+                    offsetY: 0
+                })
+            });
+        },
+        zIndex: 20,
+        declutter: true
+    });
+    map.addLayer(labelLayer);
+
+    let allFeaturesMap = new Map();
+
+    fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/russia.geojson')
+        .then(r => r.json())
+        .then(geojson => {
+            const format = new ol.format.GeoJSON();
+            const features = format.readFeatures(geojson, { featureProjection: 'EPSG:3857' });
+            
+            features.forEach(feature => {
+                let name = feature.get('name');
+                if (!name) return;
+                if (EXCLUDED_REGIONS.some(ex => name.includes(ex))) return;
+                allFeaturesMap.set(name, feature);
+                
+                const geom = feature.getGeometry();
+                let centerPoint = null;
+                if (geom.getType() === 'MultiPolygon') {
+                    let maxArea = 0, largest;
+                    if (geom.getPolygons) {
+                        geom.getPolygons().forEach(p => { const area = p.getArea(); if (area > maxArea) { maxArea = area; largest = p; } });
+                        if (largest) centerPoint = largest.getInteriorPoint();
+                    }
+                } else if (geom.getType() === 'Polygon') {
+                    centerPoint = geom.getInteriorPoint();
+                }
+                if (centerPoint && !labelSource.getFeatures().some(f => f.get('name') === name)) {
+                    const labelFeature = new ol.Feature(centerPoint);
+                    labelFeature.set('name', name);
+                    labelSource.addFeature(labelFeature);
+                }
+            });
+            
+            updateAllLayers();
+            renderFullSummary();
+            fetchAlerts();
+            setInterval(fetchAlerts, 15000);
+        })
+        .catch(console.error);
+
+    function updateAllLayers() {
+        clearSource.clear();
+        dangerSource.clear();
+        attackSource.clear();
+        missileSource.clear();
+        
+        for (let [name, feature] of allFeaturesMap) {
+            const status = getRegionStatus(name);
+            const clone = feature.clone();
+            clone.set('name', name);
+            
+            if (status === 'missile_alert') {
+                missileSource.addFeature(clone);
+            } else if (status === 'drone_attack') {
+                attackSource.addFeature(clone);
+            } else if (status === 'drone_danger') {
+                dangerSource.addFeature(clone);
+            } else {
+                clearSource.addFeature(clone);
+            }
+        }
+        map.render();
+    }
+
+    function renderFullSummary() {
+        const reverseMap = {};
+        for (const [ru, en] of Object.entries(regionMap)) {
+            reverseMap[en] = ru;
+        }
+        
+        let attack = [], danger = [];
+        for (let [enName, status] of regionStatuses.entries()) {
+            if (status === 'missile_alert' || status === 'drone_attack') {
+                const ruName = reverseMap[enName] || enName;
+                attack.push(ruName);
+            } else if (status === 'drone_danger') {
+                const ruName = reverseMap[enName] || enName;
+                danger.push(ruName);
+            }
+        }
+        attack.sort(); danger.sort();
+        
+        const dateTimeStr = getFullDateForSummary();
+        
+        let html = '';
+        html += `<div class="summary-time">🕐 ${dateTimeStr}</div>`;
+        html += `<div class="threat-header">🔴 Атака / Внимание БПЛА / ракет</div><div class="region-list-block">`;
+        if (attack.length) attack.forEach(r => html += `<span class="region-line" data-region="${r}">• ${r}</span>`);
+        else html += `<div class="empty-message">— нет угроз —</div>`;
+        html += `</div><div class="sub-header">🟡 Опасность БПЛА</div><div class="region-list-block">`;
+        if (danger.length) danger.forEach(r => html += `<span class="region-line" data-region="${r}">• ${r}</span>`);
+        else html += `<div class="empty-message">— нет угроз —</div>`;
+        html += `</div>`;
+        document.getElementById('dynamicSummaryBlock').innerHTML = html;
+        
+        document.querySelectorAll('.region-line').forEach(el => {
+            el.addEventListener('click', (e) => {
+                const ruName = el.dataset.region;
+                const enName = regionMap[ruName];
+                const feature = allFeaturesMap.get(enName);
+                if (feature) {
+                    const geom = feature.getGeometry();
+                    if (geom) map.getView().fit(geom.getExtent(), { padding: [50,50,50,50], maxZoom: 8 });
+                }
+            });
+        });
+    }
+
+    document.getElementById('copySummaryBtn').addEventListener('click', () => {
+        const reverseMap = {};
+        for (const [ru, en] of Object.entries(regionMap)) {
+            reverseMap[en] = ru;
+        }
+        
+        let attack = [], danger = [];
+        for (let [enName, status] of regionStatuses.entries()) {
+            if (status === 'missile_alert' || status === 'drone_attack') {
+                const ruName = reverseMap[enName] || enName;
+                attack.push(ruName);
+            } else if (status === 'drone_danger') {
+                const ruName = reverseMap[enName] || enName;
+                danger.push(ruName);
+            }
+        }
+        const dateTimeStr = getFullDateForSummary();
+        let text = `✈️ Тревоги на территории РФ ${dateTimeStr}\n\n`;
+        text += `🔴 АКТИВНАЯ ТРЕВОГА (БПЛА/Ракеты):\n`;
+        if (attack.length) attack.forEach(r => text += `  • ${r}\n`);
+        else text += `  — нет угроз —\n`;
+        text += `\n🟡 ПОТЕНЦИАЛЬНАЯ ОПАСНОСТЬ (БПЛА):\n`;
+        if (danger.length) danger.forEach(r => text += `  • ${r}\n`);
+        else text += `  — нет угроз —\n`;
+        navigator.clipboard.writeText(text);
+        const btn = document.getElementById('copySummaryBtn');
+        btn.textContent = '✅ Скопировано!';
+        setTimeout(() => btn.textContent = '📋 Копировать сводку', 1500);
+    });
+
+    // Попап
+    const popupElement = document.createElement('div');
+    popupElement.className = 'ol-popup';
+    const popupCloser = document.createElement('a');
+    popupCloser.href = '#';
+    popupCloser.className = 'popup-closer';
+    popupCloser.innerHTML = '×';
+    popupCloser.onclick = () => { popupOverlay.setPosition(undefined); return false; };
+    popupElement.appendChild(popupCloser);
+    const popupContent = document.createElement('div');
+    popupElement.appendChild(popupContent);
+    
+    const popupOverlay = new ol.Overlay({ element: popupElement, autoPan: true, offset: [10, -10] });
+    map.addOverlay(popupOverlay);
+    
+    map.on('singleclick', (evt) => {
+        let feature = null;
+        const layers = [clearLayer, dangerLayer, attackLayer, missileLayer];
+        for (const layer of layers) {
+            map.forEachFeatureAtPixel(evt.pixel, (f) => { feature = f; return true; }, { layerFilter: (l) => l === layer });
+            if (feature) break;
+        }
+        if (feature) {
+            const enName = feature.get('name');
+            const status = getRegionStatus(enName);
+            
+            let ruName = enName;
+            for (const [ru, en] of Object.entries(regionMap)) {
+                if (en === enName) { ruName = ru; break; }
+            }
+            
+            let html = `<div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; border-bottom: 1px solid #333;">${ruName}</div>`;
+            if (status === 'missile_alert') html += `<div style="color: #ff6666; font-weight: bold;">🚀 РАКЕТНАЯ ОПАСНОСТЬ</div>`;
+            else if (status === 'drone_attack') html += `<div style="color: #ff6666; font-weight: bold;">🔴 ТРЕВОГА БПЛА</div>`;
+            else if (status === 'drone_danger') html += `<div style="color: #ffcc66; font-weight: bold;">🟡 ОПАСНОСТЬ БПЛА</div>`;
+            else html += `<div style="color: #80c080;">🟢 Отбой / спокойно</div>`;
+            popupContent.innerHTML = html;
+            popupOverlay.setPosition(evt.coordinate);
+        } else {
+            popupOverlay.setPosition(undefined);
+        }
+    });
+
+    // Свёртывание
+    document.getElementById('legendHeader').addEventListener('click', () => {
+        const items = document.getElementById('legendItems');
+        const isHidden = items.style.display === 'none';
+        items.style.display = isHidden ? 'flex' : 'none';
+        document.getElementById('legendToggle').innerHTML = isHidden ? '▼' : '▲';
+    });
+    document.getElementById('summaryHeader').addEventListener('click', () => {
+        const content = document.getElementById('summaryContent');
+        const isCollapsed = content.classList.contains('collapsed');
+        if (isCollapsed) {
+            content.classList.remove('collapsed');
+            document.getElementById('summaryArrow').innerHTML = '▼';
+        } else {
+            content.classList.add('collapsed');
+            document.getElementById('summaryArrow').innerHTML = '▲';
+        }
+    });
+
+    function updateOrbitClock() {
+        const { time } = getCurrentTimeParts();
+        const dateStr = getFullDateForClock();
+        document.getElementById('orbitTime').innerHTML = time;
+        document.getElementById('orbitDate').innerHTML = dateStr;
+    }
+    updateOrbitClock();
+    setInterval(updateOrbitClock, 1000);
+</script>
+</body>
+    </html>
