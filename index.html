@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Карта тревог РФ — Новый API</title>
+    <title>Карта тревог РФ — Оригинальные цвета</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.4.0/ol.css" />
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
@@ -66,10 +66,11 @@
         }
         .legend-item { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #ddd; }
         .color-box { width: 20px; height: 20px; border-radius: 4px; }
-        .color-clear { background: #1a1a1a; border: 2px solid #555; }
-        .color-danger { background: #b38600; border: 2px solid #ffdd66; }
-        .color-attack { background: #cc1a1a; border: 2px solid #ff8888; }
-        .color-missile { background: #660000; border: 2px solid #ffaaaa; }
+        /* ОРИГИНАЛЬНЫЕ ЦВЕТА */
+        .color-clear { background: #2a2a2a; border: 1px solid #555; }
+        .color-danger { background: #cc9900; border: 1px solid #ffdd66; }
+        .color-attack { background: #cc0000; border: 1px solid #ff6666; }
+        .color-missile { background: #800020; border: 1px solid #ff8888; }
 
         .summary-header {
             padding: 12px 18px;
@@ -140,7 +141,6 @@
             cursor: pointer;
             font-size: 11px;
             margin-top: 12px;
-            transition: 0.2s;
             width: 100%;
         }
         .copy-btn:hover { background: rgba(255, 255, 255, 0.2); }
@@ -198,7 +198,7 @@
 
 <script>
     // =============================================
-    // НОВЫЙ API
+    // API
     // =============================================
     const API_URL = 'https://radar-n6y0.onrender.com/api/statuses';
     
@@ -212,7 +212,7 @@
 
     const MONTHS_RU = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
-    // Словарь для нормализации названий регионов (приводим к единому формату)
+    // Словарь для нормализации названий регионов
     const regionNameMap = {
         "Брянская область": "Брянская область",
         "Калужская область": "Калужская область",
@@ -246,17 +246,16 @@
         "Красноярский край": "Красноярский край",
         "Иркутская область": "Иркутская область",
         "Хабаровский край": "Хабаровский край",
-        "Приморский край": "Приморский край"
+        "Приморский край": "Приморский край",
+        "Удмуртская Республика": "Удмуртская Республика",
+        "Чувашская Республика": "Чувашская Республика",
+        "Республика Марий Эл": "Республика Марий Эл"
     };
 
     function normalizeRegionName(apiName) {
-        // Прямое совпадение
         if (regionNameMap[apiName]) return regionNameMap[apiName];
-        
-        // Убираем лишние пробелы
         const trimmed = apiName.trim();
         if (regionNameMap[trimmed]) return regionNameMap[trimmed];
-        
         return apiName;
     }
 
@@ -302,7 +301,6 @@
                     let status = info.status || 'clear';
                     const canonical = normalizeRegionName(regionName);
                     regionStatuses.set(canonical, status);
-                    console.log(`Регион: ${regionName} -> ${canonical} -> статус: ${status}`);
                 }
                 updateAllLayers();
                 renderFullSummary();
@@ -332,24 +330,25 @@
     let attackSource = new ol.source.Vector();
     let missileSource = new ol.source.Vector();
 
+    // ОРИГИНАЛЬНЫЕ СТИЛИ СТАРЫХ ЦВЕТОВ
     const clearStyle = new ol.style.Style({
-        fill: new ol.style.Fill({ color: 'rgba(26, 26, 26, 0.6)' }),
-        stroke: new ol.style.Stroke({ color: '#555555', width: 2 })
+        fill: new ol.style.Fill({ color: 'rgba(42, 42, 42, 0.6)' }),
+        stroke: new ol.style.Stroke({ color: '#555555', width: 1.5 })
     });
     
     const dangerStyle = new ol.style.Style({
-        fill: new ol.style.Fill({ color: 'rgba(179, 134, 0, 0.75)' }),
-        stroke: new ol.style.Stroke({ color: '#ffdd66', width: 2 })
+        fill: new ol.style.Fill({ color: 'rgba(204, 153, 0, 0.65)' }),
+        stroke: new ol.style.Stroke({ color: '#cc9900', width: 2 })
     });
     
     const attackStyle = new ol.style.Style({
-        fill: new ol.style.Fill({ color: 'rgba(204, 26, 26, 0.8)' }),
-        stroke: new ol.style.Stroke({ color: '#ff8888', width: 2 })
+        fill: new ol.style.Fill({ color: 'rgba(204, 0, 0, 0.7)' }),
+        stroke: new ol.style.Stroke({ color: '#cc0000', width: 2 })
     });
     
     const missileStyle = new ol.style.Style({
-        fill: new ol.style.Fill({ color: 'rgba(102, 0, 0, 0.85)' }),
-        stroke: new ol.style.Stroke({ color: '#ffaaaa', width: 2 })
+        fill: new ol.style.Fill({ color: 'rgba(128, 0, 32, 0.75)' }),
+        stroke: new ol.style.Stroke({ color: '#800020', width: 2.2 })
     });
 
     const clearLayer = new ol.layer.Vector({ source: clearSource, style: clearStyle, zIndex: 5 });
@@ -651,4 +650,4 @@
     setInterval(updateOrbitClock, 1000);
 </script>
 </body>
-    </html>
+</html>
