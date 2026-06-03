@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Карта тревог РФ — Полное соответствие API</title>
+    <title>Карта тревог РФ — Новый API</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.4.0/ol.css" />
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
@@ -140,6 +140,7 @@
             cursor: pointer;
             font-size: 11px;
             margin-top: 12px;
+            transition: 0.2s;
             width: 100%;
         }
         .copy-btn:hover { background: rgba(255, 255, 255, 0.2); }
@@ -197,10 +198,9 @@
 
 <script>
     // =============================================
-    // API
+    // НОВЫЙ API
     // =============================================
-    const API_URL = 'https://radar.ra5cq.ru/api/state';
-    const WS_URL = 'ws://localhost:3000';
+    const API_URL = 'https://radar-n6y0.onrender.com/api/statuses';
     
     const EXCLUDED_REGIONS = [
         "Донецкая Народная Республика",
@@ -212,147 +212,52 @@
 
     const MONTHS_RU = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
-    // ========== ПОЛНОЕ СООТВЕТСТВИЕ: API ключ → Название региона на карте ==========
-    const apiKeyToRegion = {
-        // Центр
-        "moscow_obl": "Московская область",
-        "moscow": "Москва",
-        "belgorod": "Белгородская область",
-        "bryansk": "Брянская область",
-        "voronezh": "Воронежская область",
-        "kursk": "Курская область",
-        "oryol": "Орловская область",
-        "ryazan": "Рязанская область",
-        "tula": "Тульская область",
-        "kaluga": "Калужская область",
-        "smolensk": "Смоленская область",
-        "tver": "Тверская область",
-        "vladimir": "Владимирская область",
-        "ivanovo": "Ивановская область",
-        "kostroma": "Костромская область",
-        "yaroslavl": "Ярославская область",
-        "lipetsk": "Липецкая область",
-        "tambov": "Тамбовская область",
-        
-        // Северо-Запад
-        "spb_leningrad": "Санкт-Петербург",
-        "leningrad_obl": "Ленинградская область",
-        "novgorod": "Новгородская область",
-        "pskov": "Псковская область",
-        "karelia": "Республика Карелия",
-        "komi": "Республика Коми",
-        "arkhangelsk": "Архангельская область",
-        "murmansk": "Мурманская область",
-        "kaliningrad": "Калининградская область",
-        "vologda": "Вологодская область",
-        
-        // Юг
-        "krasnodar": "Краснодарский край",
-        "rostov": "Ростовская область",
-        "volgograd": "Волгоградская область",
-        "astrakhan": "Астраханская область",
-        "adygea": "Республика Адыгея",
-        "kalmykia": "Республика Калмыкия",
-        "crimea": "Республика Крым",
-        "sevastopol": "Севастополь",
-        
-        // Кавказ
-        "dagestan": "Республика Дагестан",
-        "chechnya": "Чеченская Республика",
-        "ingushetia": "Республика Ингушетия",
-        "kabardin": "Кабардино-Балкарская Республика",
-        "karachay": "Карачаево-Черкесская Республика",
-        "ossetia": "Республика Северная Осетия",
-        "stavropol": "Ставропольский край",
-        
-        // Поволжье
-        "tatarstan": "Республика Татарстан",
-        "bashkortostan": "Республика Башкортостан",
-        "udmurtia": "Удмуртская Республика",
-        "chuvashia": "Чувашская Республика",
-        "mariy_el": "Республика Марий Эл",
-        "mordovia": "Республика Мордовия",
-        "samara": "Самарская область",
-        "nizhny_novgorod": "Нижегородская область",
-        "saratov": "Саратовская область",
-        "penza": "Пензенская область",
-        "ulyanovsk": "Ульяновская область",
-        "kirov": "Кировская область",
-        "perm": "Пермский край",
-        "orenburg": "Оренбургская область",
-        
-        // Урал
-        "sverdlovsk": "Свердловская область",
-        "chelyabinsk": "Челябинская область",
-        "kurgan": "Курганская область",
-        "tyumen": "Тюменская область",
-        "khmao": "Ханты-Мансийский АО",
-        "yanao": "Ямало-Ненецкий АО",
-        
-        // Сибирь
-        "omsk": "Омская область",
-        "novosibirsk": "Новосибирская область",
-        "tomsk": "Томская область",
-        "kemerovo": "Кемеровская область",
-        "irkutsk": "Иркутская область",
-        "krasnoyarsk": "Красноярский край",
-        "altai": "Алтайский край",
-        "khakassia": "Республика Хакасия",
-        "tuva": "Республика Тыва",
-        "buryatia": "Республика Бурятия",
-        
-        // Дальний Восток
-        "primorye": "Приморский край",
-        "khabarovsk": "Хабаровский край",
-        "amur": "Амурская область",
-        "sakhalin": "Сахалинская область",
-        "kamchatka": "Камчатский край",
-        "magadan": "Магаданская область",
-        "zabaykalsky": "Забайкальский край",
-        "evreyskaya": "Еврейская АО",
-        "chukotka": "Чукотский АО"
-    };
-
-    // Функция нормализации (приводит названия из GeoJSON к каноническому виду)
-    const geoJsonNormalize = {
-        "Московская обл.": "Московская область",
-        "Ленинградская обл.": "Ленинградская область",
+    // Словарь для нормализации названий регионов (приводим к единому формату)
+    const regionNameMap = {
+        "Брянская область": "Брянская область",
+        "Калужская область": "Калужская область",
+        "Курская область": "Курская область",
+        "Ленинградская область": "Ленинградская область",
+        "Московская область": "Московская область",
+        "Нижегородская область": "Нижегородская область",
+        "Орловская область": "Орловская область",
+        "Ростовская область": "Ростовская область",
         "Санкт-Петербург": "Санкт-Петербург",
-        "Республика Адыгея": "Республика Адыгея",
-        "Республика Башкортостан": "Республика Башкортостан",
-        "Республика Бурятия": "Республика Бурятия",
-        "Республика Алтай": "Республика Алтай",
-        "Республика Дагестан": "Республика Дагестан",
-        "Республика Ингушетия": "Республика Ингушетия",
-        "Республика Кабардино-Балкария": "Кабардино-Балкарская Республика",
-        "Республика Калмыкия": "Республика Калмыкия",
-        "Республика Карачаево-Черкесия": "Карачаево-Черкесская Республика",
-        "Республика Карелия": "Республика Карелия",
-        "Республика Коми": "Республика Коми",
-        "Республика Крым": "Республика Крым",
-        "Республика Марий Эл": "Республика Марий Эл",
-        "Республика Мордовия": "Республика Мордовия",
-        "Республика Саха (Якутия)": "Республика Саха (Якутия)",
-        "Республика Северная Осетия": "Республика Северная Осетия",
+        "Смоленская область": "Смоленская область",
+        "Тамбовская область": "Тамбовская область",
+        "Тульская область": "Тульская область",
+        "Ульяновская область": "Ульяновская область",
+        "Ярославская область": "Ярославская область",
+        "Москва": "Москва",
         "Республика Татарстан": "Республика Татарстан",
-        "Республика Тыва": "Республика Тыва",
-        "Республика Хакасия": "Республика Хакасия",
-        "Республика Удмуртия": "Удмуртская Республика",
-        "Республика Чувашия": "Чувашская Республика",
-        "Алтайский край": "Алтайский край",
-        "Забайкальский край": "Забайкальский край",
-        "Камчатский край": "Камчатский край",
+        "Республика Башкортостан": "Республика Башкортостан",
         "Краснодарский край": "Краснодарский край",
-        "Красноярский край": "Красноярский край",
-        "Пермский край": "Пермский край",
-        "Приморский край": "Приморский край",
         "Ставропольский край": "Ставропольский край",
-        "Хабаровский край": "Хабаровский край"
+        "Пермский край": "Пермский край",
+        "Республика Крым": "Республика Крым",
+        "Севастополь": "Севастополь",
+        "Волгоградская область": "Волгоградская область",
+        "Саратовская область": "Саратовская область",
+        "Самарская область": "Самарская область",
+        "Челябинская область": "Челябинская область",
+        "Свердловская область": "Свердловская область",
+        "Новосибирская область": "Новосибирская область",
+        "Омская область": "Омская область",
+        "Красноярский край": "Красноярский край",
+        "Иркутская область": "Иркутская область",
+        "Хабаровский край": "Хабаровский край",
+        "Приморский край": "Приморский край"
     };
 
-    function normalizeGeoJsonName(name) {
-        if (!name) return name;
-        return geoJsonNormalize[name] || name;
+    function normalizeRegionName(apiName) {
+        // Прямое совпадение
+        if (regionNameMap[apiName]) return regionNameMap[apiName];
+        
+        // Убираем лишние пробелы
+        const trimmed = apiName.trim();
+        if (regionNameMap[trimmed]) return regionNameMap[trimmed];
+        
+        return apiName;
     }
 
     function getCurrentTimeParts() {
@@ -378,85 +283,47 @@
     }
 
     let regionStatuses = new Map();
-    let ws = null;
-    let allFeaturesMap = new Map();
-    let updateScheduled = false;
-
-    function scheduleUpdate() {
-        if (updateScheduled) return;
-        updateScheduled = true;
-        requestAnimationFrame(() => { updateAllLayers(); updateScheduled = false; });
-    }
-
+    
     function getRegionStatus(regionName) {
-        // Ищем точное совпадение
-        if (regionStatuses.has(regionName)) return regionStatuses.get(regionName);
-        // Ищем по ключу в apiKeyToRegion
-        for (const [apiKey, apiRegionName] of Object.entries(apiKeyToRegion)) {
-            if (apiRegionName === regionName) {
-                return regionStatuses.get(apiRegionName) || 'clear';
-            }
-        }
-        return 'clear';
+        const canonical = normalizeRegionName(regionName);
+        return regionStatuses.get(canonical) || 'clear';
     }
     
-    // ========== WEBSOCKET ==========
-    function connectWebSocket() {
-        ws = new WebSocket(WS_URL);
-        ws.onopen = () => console.log('✅ WebSocket подключён');
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            console.log('📨 WebSocket:', data);
-            if (data.type === 'init') {
-                for (const [region, status] of data.statuses) {
-                    regionStatuses.set(region, status);
-                }
-                scheduleUpdate();
-                renderFullSummary();
-            } else if (data.type === 'update') {
-                if (data.status === 'clear') {
-                    regionStatuses.delete(data.region);
-                } else {
-                    regionStatuses.set(data.region, data.status);
-                }
-                scheduleUpdate();
-                renderFullSummary();
-            }
-        };
-        ws.onclose = () => setTimeout(connectWebSocket, 5000);
-    }
-    
-    // ========== API РЕЗЕРВ ==========
-    async function fetchApiAlerts() {
+    async function fetchAlerts() {
         try {
             const resp = await fetch(API_URL);
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const apiData = await resp.json();
             
-            for (const [apiKey, data] of Object.entries(apiData)) {
-                if (apiKey === 'timestamp' || apiKey === 'version') continue;
-                const regionName = apiKeyToRegion[apiKey];
-                if (!regionName || EXCLUDED_REGIONS.includes(regionName)) continue;
-                
-                let status = 'clear';
-                if (data.missile === 'alert') status = 'missile_alert';
-                else if (data.uav === 'alert') status = 'drone_attack';
-                else if (data.uav === 'warning') status = 'drone_danger';
-                
-                if (!regionStatuses.has(regionName)) {
-                    regionStatuses.set(regionName, status);
+            if (apiData && apiData.regions) {
+                regionStatuses.clear();
+                for (const [regionName, info] of Object.entries(apiData.regions)) {
+                    if (EXCLUDED_REGIONS.includes(regionName)) continue;
+                    let status = info.status || 'clear';
+                    const canonical = normalizeRegionName(regionName);
+                    regionStatuses.set(canonical, status);
+                    console.log(`Регион: ${regionName} -> ${canonical} -> статус: ${status}`);
                 }
+                updateAllLayers();
+                renderFullSummary();
             }
-            scheduleUpdate();
-            renderFullSummary();
         } catch (err) { console.error('Ошибка API:', err); }
     }
 
     // ========== КАРТА ==========
     const map = new ol.Map({
         target: 'map',
-        layers: [new ol.layer.Tile({ source: new ol.source.XYZ({ url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', subdomains: 'abcd' }) })],
-        view: new ol.View({ center: ol.proj.fromLonLat([60, 65]), zoom: 4, minZoom: 3, maxZoom: 10, enableRotation: false }),
+        layers: [
+            new ol.layer.Tile({ source: new ol.source.XYZ({ url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', subdomains: 'abcd' }) })
+        ],
+        view: new ol.View({
+            center: ol.proj.fromLonLat([60, 65]),
+            zoom: 4,
+            minZoom: 3,
+            maxZoom: 10,
+            constrainRotation: true,
+            enableRotation: false
+        }),
         controls: []
     });
 
@@ -465,15 +332,35 @@
     let attackSource = new ol.source.Vector();
     let missileSource = new ol.source.Vector();
 
-    const clearStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(26, 26, 26, 0.6)' }), stroke: new ol.style.Stroke({ color: '#555555', width: 2 }) });
-    const dangerStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(179, 134, 0, 0.75)' }), stroke: new ol.style.Stroke({ color: '#ffdd66', width: 2 }) });
-    const attackStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(204, 26, 26, 0.8)' }), stroke: new ol.style.Stroke({ color: '#ff8888', width: 2 }) });
-    const missileStyle = new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(102, 0, 0, 0.85)' }), stroke: new ol.style.Stroke({ color: '#ffaaaa', width: 2 }) });
+    const clearStyle = new ol.style.Style({
+        fill: new ol.style.Fill({ color: 'rgba(26, 26, 26, 0.6)' }),
+        stroke: new ol.style.Stroke({ color: '#555555', width: 2 })
+    });
+    
+    const dangerStyle = new ol.style.Style({
+        fill: new ol.style.Fill({ color: 'rgba(179, 134, 0, 0.75)' }),
+        stroke: new ol.style.Stroke({ color: '#ffdd66', width: 2 })
+    });
+    
+    const attackStyle = new ol.style.Style({
+        fill: new ol.style.Fill({ color: 'rgba(204, 26, 26, 0.8)' }),
+        stroke: new ol.style.Stroke({ color: '#ff8888', width: 2 })
+    });
+    
+    const missileStyle = new ol.style.Style({
+        fill: new ol.style.Fill({ color: 'rgba(102, 0, 0, 0.85)' }),
+        stroke: new ol.style.Stroke({ color: '#ffaaaa', width: 2 })
+    });
 
-    map.addLayer(new ol.layer.Vector({ source: clearSource, style: clearStyle, zIndex: 5 }));
-    map.addLayer(new ol.layer.Vector({ source: dangerSource, style: dangerStyle, zIndex: 6 }));
-    map.addLayer(new ol.layer.Vector({ source: attackSource, style: attackStyle, zIndex: 7 }));
-    map.addLayer(new ol.layer.Vector({ source: missileSource, style: missileStyle, zIndex: 8 }));
+    const clearLayer = new ol.layer.Vector({ source: clearSource, style: clearStyle, zIndex: 5 });
+    const dangerLayer = new ol.layer.Vector({ source: dangerSource, style: dangerStyle, zIndex: 6 });
+    const attackLayer = new ol.layer.Vector({ source: attackSource, style: attackStyle, zIndex: 7 });
+    const missileLayer = new ol.layer.Vector({ source: missileSource, style: missileStyle, zIndex: 8 });
+
+    map.addLayer(clearLayer);
+    map.addLayer(dangerLayer);
+    map.addLayer(attackLayer);
+    map.addLayer(missileLayer);
 
     const labelSource = new ol.source.Vector();
     const labelLayer = new ol.layer.Vector({
@@ -491,21 +378,29 @@
                 "Республика Марий Эл": "Марий Эл",
                 "Краснодарский край": "Краснодарский кр.",
                 "Ставропольский край": "Ставропольский кр.",
-                "Пермский край": "Пермский кр.",
-                "Приморский край": "Приморский кр."
+                "Пермский край": "Пермский кр."
             };
             const displayName = shortNames[name] || name;
-            const lines = displayName.includes(' ') && displayName.length - displayName.indexOf(' ') < 25 
-                ? [displayName.substring(0, displayName.indexOf(' ')), displayName.substring(displayName.indexOf(' ') + 1)]
-                : [displayName];
+            
+            function splitName(n) {
+                const spaceIndex = n.indexOf(' ');
+                if (spaceIndex > 0 && n.length - spaceIndex < 25) {
+                    return [n.substring(0, spaceIndex), n.substring(spaceIndex + 1)];
+                }
+                return [n];
+            }
+            
+            const lines = splitName(displayName);
             const fontSize = zoom < 5 ? '10px' : '12px';
+            
             return new ol.style.Style({
                 text: new ol.style.Text({
                     text: lines.join('\n'),
                     font: `500 ${fontSize} "Segoe UI"`,
                     fill: new ol.style.Fill({ color: '#ffffff' }),
                     stroke: new ol.style.Stroke({ color: '#000000', width: 2.5 }),
-                    textAlign: 'center'
+                    textAlign: 'center',
+                    offsetY: 0
                 })
             });
         },
@@ -514,7 +409,8 @@
     });
     map.addLayer(labelLayer);
 
-    // Загрузка GeoJSON
+    let allFeaturesMap = new Map();
+
     fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/russia.geojson')
         .then(r => r.json())
         .then(geojson => {
@@ -528,7 +424,7 @@
                 if (!name) return;
                 if (EXCLUDED_REGIONS.some(ex => name.includes(ex))) return;
                 
-                const normalized = normalizeGeoJsonName(name);
+                const normalized = normalizeRegionName(name);
                 feature.set('name', normalized);
                 
                 if (normalized === "Московская область") {
@@ -542,9 +438,11 @@
                 }
                 
                 if (allFeaturesMap.has(normalized)) {
-                    const existing = allFeaturesMap.get(normalized);
-                    const collection = new ol.geom.GeometryCollection([existing.getGeometry(), feature.getGeometry()]);
-                    existing.setGeometry(collection);
+                    const existingFeature = allFeaturesMap.get(normalized);
+                    const existingGeom = existingFeature.getGeometry();
+                    const newGeom = feature.getGeometry();
+                    const collection = new ol.geom.GeometryCollection([existingGeom, newGeom]);
+                    existingFeature.setGeometry(collection);
                 } else {
                     allFeaturesMap.set(normalized, feature);
                 }
@@ -552,52 +450,50 @@
             
             if (moscowRegionFeatures.length > 0) {
                 const geoms = moscowRegionFeatures.map(f => f.getGeometry());
-                const merged = moscowRegionFeatures[0].clone();
-                merged.setGeometry(new ol.geom.GeometryCollection(geoms));
-                merged.set('name', "Московская область");
-                allFeaturesMap.set("Московская область", merged);
+                const collection = new ol.geom.GeometryCollection(geoms);
+                const mergedFeature = moscowRegionFeatures[0].clone();
+                mergedFeature.setGeometry(collection);
+                mergedFeature.set('name', "Московская область");
+                allFeaturesMap.set("Московская область", mergedFeature);
             }
             
-            // Добавляем метки
             for (let [name, feature] of allFeaturesMap) {
                 const geom = feature.getGeometry();
-                let center = null;
+                let centerPoint = null;
                 if (geom.getType() === 'MultiPolygon') {
                     let maxArea = 0, largest;
                     if (geom.getPolygons) {
-                        geom.getPolygons().forEach(p => {
-                            const area = p.getArea();
-                            if (area > maxArea) { maxArea = area; largest = p; }
-                        });
-                        if (largest) center = largest.getInteriorPoint();
+                        geom.getPolygons().forEach(p => { const area = p.getArea(); if (area > maxArea) { maxArea = area; largest = p; } });
+                        if (largest) centerPoint = largest.getInteriorPoint();
                     }
                 } else if (geom.getType() === 'Polygon') {
-                    center = geom.getInteriorPoint();
+                    centerPoint = geom.getInteriorPoint();
                 } else if (geom.getType() === 'GeometryCollection') {
-                    const geoms = geom.getGeometries();
-                    for (let g of geoms) {
+                    const geometries = geom.getGeometries();
+                    for (let g of geometries) {
                         if (g.getType() === 'Polygon') {
-                            center = g.getInteriorPoint();
+                            centerPoint = g.getInteriorPoint();
                             break;
                         } else if (g.getType() === 'MultiPolygon' && g.getPolygons) {
                             const polys = g.getPolygons();
                             if (polys.length > 0) {
-                                center = polys[0].getInteriorPoint();
+                                centerPoint = polys[0].getInteriorPoint();
                                 break;
                             }
                         }
                     }
                 }
-                if (center && !labelSource.getFeatures().some(f => f.get('name') === name)) {
-                    labelSource.addFeature(new ol.Feature({ geometry: center, name: name }));
+                if (centerPoint && !labelSource.getFeatures().some(f => f.get('name') === name)) {
+                    const labelFeature = new ol.Feature(centerPoint);
+                    labelFeature.set('name', name);
+                    labelSource.addFeature(labelFeature);
                 }
             }
             
             updateAllLayers();
             renderFullSummary();
-            connectWebSocket();
-            fetchApiAlerts();
-            setInterval(fetchApiAlerts, 30000);
+            fetchAlerts();
+            setInterval(fetchAlerts, 15000);
         })
         .catch(console.error);
 
@@ -612,10 +508,15 @@
             const clone = feature.clone();
             clone.set('name', name);
             
-            if (status === 'missile_alert') missileSource.addFeature(clone);
-            else if (status === 'drone_attack') attackSource.addFeature(clone);
-            else if (status === 'drone_danger') dangerSource.addFeature(clone);
-            else clearSource.addFeature(clone);
+            if (status === 'missile_alert') {
+                missileSource.addFeature(clone);
+            } else if (status === 'drone_attack') {
+                attackSource.addFeature(clone);
+            } else if (status === 'drone_danger') {
+                dangerSource.addFeature(clone);
+            } else {
+                clearSource.addFeature(clone);
+            }
         }
         map.render();
     }
@@ -629,6 +530,7 @@
         attack.sort(); danger.sort();
         
         const dateTimeStr = getFullDateForSummary();
+        
         let html = '';
         html += `<div class="summary-time">🕐 ${dateTimeStr}</div>`;
         html += `<div class="threat-header">🔴 Атака / Внимание БПЛА / ракет</div><div class="region-list-block">`;
@@ -641,10 +543,13 @@
         document.getElementById('dynamicSummaryBlock').innerHTML = html;
         
         document.querySelectorAll('.region-line').forEach(el => {
-            el.addEventListener('click', () => {
+            el.addEventListener('click', (e) => {
                 const regionName = el.dataset.region;
                 const feature = allFeaturesMap.get(regionName);
-                if (feature) map.getView().fit(feature.getGeometry().getExtent(), { padding: [50,50,50,50], maxZoom: 8 });
+                if (feature) {
+                    const geom = feature.getGeometry();
+                    if (geom) map.getView().fit(geom.getExtent(), { padding: [50,50,50,50], maxZoom: 8 });
+                }
             });
         });
     }
@@ -656,7 +561,8 @@
             else if (status === 'drone_danger') danger.push(name);
         }
         const dateTimeStr = getFullDateForSummary();
-        let text = `✈️ Тревоги на территории РФ ${dateTimeStr}\n\n🔴 АКТИВНАЯ ТРЕВОГА (БПЛА/Ракеты):\n`;
+        let text = `✈️ Тревоги на территории РФ ${dateTimeStr}\n\n`;
+        text += `🔴 АКТИВНАЯ ТРЕВОГА (БПЛА/Ракеты):\n`;
         if (attack.length) attack.forEach(r => text += `  • ${r}\n`);
         else text += `  — нет угроз —\n`;
         text += `\n🟡 ПОТЕНЦИАЛЬНАЯ ОПАСНОСТЬ (БПЛА):\n`;
@@ -669,13 +575,18 @@
     });
 
     // Попап
-    const popupDiv = document.createElement('div'); popupDiv.className = 'ol-popup';
-    const popupCloser = document.createElement('a'); popupCloser.href = '#'; popupCloser.className = 'popup-closer'; popupCloser.innerHTML = '×';
+    const popupElement = document.createElement('div');
+    popupElement.className = 'ol-popup';
+    const popupCloser = document.createElement('a');
+    popupCloser.href = '#';
+    popupCloser.className = 'popup-closer';
+    popupCloser.innerHTML = '×';
     popupCloser.onclick = () => { popupOverlay.setPosition(undefined); return false; };
-    popupDiv.appendChild(popupCloser);
+    popupElement.appendChild(popupCloser);
     const popupContent = document.createElement('div');
-    popupDiv.appendChild(popupContent);
-    const popupOverlay = new ol.Overlay({ element: popupDiv, autoPan: true, offset: [10, -10] });
+    popupElement.appendChild(popupContent);
+    
+    const popupOverlay = new ol.Overlay({ element: popupElement, autoPan: true, offset: [10, -10] });
     map.addOverlay(popupOverlay);
     
     map.on('singleclick', (evt) => {
@@ -700,22 +611,33 @@
         }
     });
 
-    // Свёртывание
-    document.getElementById('legendHeader').addEventListener('click', () => {
-        const items = document.getElementById('legendItems');
-        const isHidden = items.style.display === 'none';
-        items.style.display = isHidden ? 'flex' : 'none';
-        document.getElementById('legendToggle').innerHTML = isHidden ? '▼' : '▲';
-    });
-    document.getElementById('summaryHeader').addEventListener('click', () => {
-        const content = document.getElementById('summaryContent');
-        const isCollapsed = content.classList.contains('collapsed');
+    // Свёртывание легенды
+    const legendHeader = document.getElementById('legendHeader');
+    const legendItems = document.getElementById('legendItems');
+    const legendToggle = document.getElementById('legendToggle');
+    legendHeader.addEventListener('click', () => {
+        const isCollapsed = legendItems.style.display === 'none';
         if (isCollapsed) {
-            content.classList.remove('collapsed');
-            document.getElementById('summaryArrow').innerHTML = '▼';
+            legendItems.style.display = 'flex';
+            legendToggle.innerHTML = '▼';
         } else {
-            content.classList.add('collapsed');
-            document.getElementById('summaryArrow').innerHTML = '▲';
+            legendItems.style.display = 'none';
+            legendToggle.innerHTML = '▲';
+        }
+    });
+
+    // Свёртывание сводки
+    const summaryHeader = document.getElementById('summaryHeader');
+    const summaryContent = document.getElementById('summaryContent');
+    const summaryArrow = document.getElementById('summaryArrow');
+    summaryHeader.addEventListener('click', () => {
+        const isCollapsed = summaryContent.classList.contains('collapsed');
+        if (isCollapsed) {
+            summaryContent.classList.remove('collapsed');
+            summaryArrow.innerHTML = '▼';
+        } else {
+            summaryContent.classList.add('collapsed');
+            summaryArrow.innerHTML = '▲';
         }
     });
 
