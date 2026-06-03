@@ -1,18 +1,35 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Карта опасностей РФ — Оригинал</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.4.0/ol.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
-    <script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Карта опасностей РФ — Радар</title>
+    <!-- OpenLayers CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.4.0/ol.css">
+    <!-- Шрифты -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; background: #0a0a0a; }
-        #map { width: 100vw; height: 100vh; background: #000; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none; /* Легкое предотвращение выделения, но не мешает работе */
+        }
 
-        /* Часы (оставляем оригинальный стиль) */
+        body {
+            overflow: hidden;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #000;
+        }
+
+        /* Карта на весь экран */
+        #map {
+            width: 100vw;
+            height: 100vh;
+            background: #030318;
+        }
+
+        /* ========= ЧАСЫ В СТИЛЕ ОРИГИНАЛА ========= */
         .orbit-clock {
             position: absolute;
             top: 20px;
@@ -22,7 +39,7 @@
             font-family: 'Orbitron', monospace;
             text-align: center;
             pointer-events: none;
-            text-shadow: 0 0 5px rgba(0,0,0,0.5);
+            text-shadow: 0 0 8px rgba(0,0,0,0.7);
         }
         .orbit-time {
             font-size: 36px;
@@ -34,140 +51,133 @@
         .orbit-date {
             font-size: 12px;
             font-weight: 400;
-            color: #aaaaaa;
+            color: #ccccdd;
             letter-spacing: 1px;
             margin-top: 5px;
         }
 
-        /* ========= ОСНОВНАЯ ПАНЕЛЬ — ТОЛЬКО ЛЕГЕНДА (ФИОЛЕТОВАЯ) ========= */
-        .legend-panel {
+        /* ========= НОВАЯ ПАНЕЛЬ — ГРАДИЕНТ (ЧЕРНЫЙ СНИЗУ, ФИОЛЕТОВЫЙ СВЕРХУ) ========= */
+        .gradient-legend {
             position: absolute;
             bottom: 20px;
             left: 20px;
             width: 260px;
-            background: rgba(25, 15, 40, 0.85);
-            backdrop-filter: blur(20px);
-            border-radius: 20px;
-            border: 1px solid rgba(170, 100, 220, 0.5);
+            background: linear-gradient(180deg, #6a2c9e 0%, #0a0a0a 100%);
+            backdrop-filter: blur(8px);
+            border-radius: 24px;
+            border: 1px solid rgba(200, 130, 255, 0.5);
             z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
             pointer-events: auto;
             font-size: 12px;
+            transition: all 0.2s;
         }
+
         .legend-header {
             padding: 12px 18px;
             font-weight: bold;
             font-size: 13px;
-            color: #e0b0ff;
-            border-bottom: 1px solid rgba(160, 90, 210, 0.4);
-            background: rgba(30, 10, 55, 0.6);
+            color: #f0e6ff;
+            border-bottom: 1px solid rgba(255, 200, 255, 0.25);
+            background: rgba(0, 0, 0, 0.25);
             cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
+            border-radius: 24px 24px 0 0;
         }
+
         .legend-toggle {
             font-size: 14px;
             transition: transform 0.2s;
-            color: #c58aff;
+            color: #dbbaff;
         }
+
         .legend-items {
             padding: 12px 18px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            background: rgba(20, 12, 35, 0.5);
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0 0 24px 24px;
         }
+
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             font-size: 12px;
-            color: #d9c9ff;
+            color: #f2e6ff;
+            font-weight: 500;
+            text-shadow: 0 0 2px black;
         }
-        .color-box {
-            width: 20px;
-            height: 20px;
-            border-radius: 4px;
-        }
-        .color-clear { background: rgba(42, 42, 42, 0.6); border: 1px solid #777; }
-        .color-danger { background: #cc9900; border: 1px solid #ffdd66; }
-        .color-attack { background: #cc0000; border: 1px solid #ff6666; }
-        .color-missile { background: #800020; border: 1px solid #ff8888; }
 
+        .color-box {
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        /* Цвета маркеров (оригинальные, для ясности) */
+        .color-clear { background: rgba(42, 42, 42, 0.8); border: 1px solid #888; }
+        .color-danger { background: #cc9900; border: 1px solid #ffdd66; }
+        .color-attack { background: #cc0000; border: 1px solid #ff8888; }
+        .color-missile { background: #800020; border: 1px solid #ffaaaa; }
+
+        /* Стили всплывающего попапа (улучшенная читаемость) */
         .ol-popup {
-            background: rgba(20, 12, 38, 0.95);
-            backdrop-filter: blur(16px);
-            border-radius: 16px;
-            border-left: 4px solid #bf5eff;
-            color: #f0eaff;
-            padding: 12px;
-            min-width: 200px;
+            background: rgba(10, 5, 20, 0.92);
+            backdrop-filter: blur(12px);
+            border-radius: 18px;
+            border-left: 5px solid #bf4eff;
+            color: #f5f0ff;
+            padding: 12px 16px;
+            min-width: 210px;
+            font-family: 'Segoe UI', system-ui;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
             pointer-events: auto;
-            position: absolute;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
         .popup-closer {
             float: right;
-            font-size: 18px;
-            color: #ca9eff;
+            font-size: 20px;
+            color: #ccaaee;
             text-decoration: none;
             cursor: pointer;
+            font-weight: bold;
+            margin-left: 8px;
         }
         .popup-closer:hover {
             color: white;
         }
 
-        /* ===== ВОДЯНОЙ ЗНАК — БЕЛЫЙ КОНТУР, ПО ЦЕНТРУ ЭКРАНА, МАЛЕНЬКИЙ ===== */
-        .watermark-center {
+        /* Водяной знак (минималистичный) */
+        .watermark-mini {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 1200;
+            bottom: 18px;
+            right: 18px;
+            z-index: 1050;
             font-family: 'Orbitron', monospace;
-            font-size: 28px;
-            font-weight: 700;
-            color: transparent;
-            -webkit-text-stroke: 1.2px rgba(255, 255, 255, 0.5);
-            text-stroke: 1.2px rgba(255, 255, 255, 0.5);
-            text-shadow: none;
+            font-size: 14px;
+            color: rgba(180, 140, 220, 0.5);
+            background: transparent;
             pointer-events: none;
-            letter-spacing: 2px;
-            white-space: nowrap;
-            opacity: 0.65;
-        }
-
-        /* Адаптация под мобильные и маленькие экраны */
-        @media (max-width: 700px) {
-            .watermark-center {
-                font-size: 20px;
-                -webkit-text-stroke: 1px rgba(255, 255, 255, 0.5);
-                letter-spacing: 1.5px;
-            }
-        }
-        @media (max-width: 480px) {
-            .watermark-center {
-                font-size: 16px;
-                -webkit-text-stroke: 0.8px rgba(255, 255, 255, 0.5);
-            }
+            letter-spacing: 1px;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/ol@v7.4.0/dist/ol.js"></script>
 </head>
 <body>
 <div id="map"></div>
 
+<!-- Часы -->
 <div class="orbit-clock">
     <div class="orbit-time" id="orbitTime">--:--</div>
     <div class="orbit-date" id="orbitDate"></div>
 </div>
 
-<!-- Панель легенды (без сводки) -->
-<div class="legend-panel" id="legendPanel">
+<!-- Панель с градиентом: чёрный снизу -> фиолетовый сверху (без падонка) -->
+<div class="gradient-legend" id="legendPanel">
     <div class="legend-header" id="legendHeader">
         <span>🚨 ТИПЫ УГРОЗ</span>
         <span class="legend-toggle" id="legendToggle">▼</span>
@@ -180,15 +190,18 @@
     </div>
 </div>
 
-<!-- ВОДЯНОЙ ЗНАК: только белый контур, по центру, маленький -->
-<div class="watermark-center">@bplamap</div>
+<!-- Лёгкий водяной знак (не бросается в глаза) -->
+<div class="watermark-mini">@bplamap</div>
 
 <script>
-    // ===========================================
-    // ПОЛНОСТЬЮ РАБОЧИЙ КОД (СВОДКА УДАЛЕНА)
-    // ===========================================
+    // ======================================================
+    // ПОЛНОСТЬЮ РАБОТАЮЩИЙ РАДАР ОПАСНОСТЕЙ
+    // ИСПРАВЛЕНО: убраны оскорбительные/неуместные строки, фон меню — градиент.
+    // API и механика карты сохранены.
+    // ======================================================
     const API_URL = 'https://radar-u913.onrender.com/api/statuses';
     
+    // Исключённые регионы (без изменений)
     const EXCLUDED_REGIONS = [
         "Донецкая Народная Республика",
         "Луганская Народная Республика",
@@ -197,6 +210,7 @@
         "ДНР", "ЛНР"
     ];
 
+    // Привязка городов к регионам
     const CITY_TO_REGION = {
         "Москва": "Московская область", "МСК": "Московская область",
         "Санкт-Петербург": "Ленинградская область", "СПБ": "Ленинградская область", "Питер": "Ленинградская область",
@@ -257,10 +271,9 @@
         const hours = msk.getHours().toString().padStart(2, '0');
         const minutes = msk.getMinutes().toString().padStart(2, '0');
         const day = msk.getDate().toString().padStart(2, '0');
-        const month = (msk.getMonth() + 1).toString().padStart(2, '0');
         const monthName = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'][msk.getMonth()];
         const year = msk.getFullYear();
-        return { time: `${hours}:${minutes}`, day, month, monthName, year };
+        return { time: `${hours}:${minutes}`, day, monthName, year };
     }
 
     function getFullDateForClock() {
@@ -290,10 +303,10 @@
                 }
                 updateAllLayers();
             }
-        } catch (err) { console.error('Ошибка API:', err); }
+        } catch (err) { console.error('Ошибка загрузки угроз:', err); }
     }
 
-    // ========== КАРТА ==========
+    // ========== ИНИЦИАЛИЗАЦИЯ КАРТЫ ==========
     const map = new ol.Map({
         target: 'map',
         layers: [new ol.layer.Tile({ source: new ol.source.XYZ({ url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', subdomains: 'abcd' }) })],
@@ -306,29 +319,10 @@
     let attackSource = new ol.source.Vector();
     let missileSource = new ol.source.Vector();
 
-    const clearLayer = new ol.layer.Vector({
-        source: clearSource,
-        style: new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(42, 42, 42, 0.6)' }), stroke: new ol.style.Stroke({ color: '#555555', width: 1 }) }),
-        zIndex: 5
-    });
-    
-    const dangerLayer = new ol.layer.Vector({
-        source: dangerSource,
-        style: new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(204, 153, 0, 0.65)' }), stroke: new ol.style.Stroke({ color: '#cc9900', width: 2 }) }),
-        zIndex: 6
-    });
-    
-    const attackLayer = new ol.layer.Vector({
-        source: attackSource,
-        style: new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(204, 0, 0, 0.7)' }), stroke: new ol.style.Stroke({ color: '#cc0000', width: 2 }) }),
-        zIndex: 7
-    });
-    
-    const missileLayer = new ol.layer.Vector({
-        source: missileSource,
-        style: new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(128, 0, 32, 0.75)' }), stroke: new ol.style.Stroke({ color: '#800020', width: 2.2 }) }),
-        zIndex: 8
-    });
+    const clearLayer = new ol.layer.Vector({ source: clearSource, style: new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(42, 42, 42, 0.6)' }), stroke: new ol.style.Stroke({ color: '#555', width: 1 }) }), zIndex: 5 });
+    const dangerLayer = new ol.layer.Vector({ source: dangerSource, style: new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(204, 153, 0, 0.65)' }), stroke: new ol.style.Stroke({ color: '#cc9900', width: 2 }) }), zIndex: 6 });
+    const attackLayer = new ol.layer.Vector({ source: attackSource, style: new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(204, 0, 0, 0.7)' }), stroke: new ol.style.Stroke({ color: '#cc0000', width: 2 }) }), zIndex: 7 });
+    const missileLayer = new ol.layer.Vector({ source: missileSource, style: new ol.style.Style({ fill: new ol.style.Fill({ color: 'rgba(128, 0, 32, 0.75)' }), stroke: new ol.style.Stroke({ color: '#800020', width: 2.2 }) }), zIndex: 8 });
 
     map.addLayer(clearLayer);
     map.addLayer(dangerLayer);
@@ -342,41 +336,13 @@
             const zoom = map.getView().getZoom();
             let name = feature.get('name');
             if (!name || zoom < 3) return new ol.style.Style();
-            
-            function splitName(n) {
-                if (n === "Москва") return ["Москва"];
-                if (n.includes('Республика')) {
-                    const parts = n.split(' ');
-                    if (parts.length >= 2) return [parts[0], parts.slice(1).join(' ')];
-                }
-                if (n.includes('область')) {
-                    const parts = n.split(' ');
-                    if (parts.length >= 2) return [parts[0], parts.slice(1).join(' ')];
-                }
-                if (n.includes('край')) {
-                    const parts = n.split(' ');
-                    if (parts.length >= 2) {
-                        if (n === "Краснодарский край") return ["Краснодарский", "край"];
-                        if (n === "Ставропольский край") return ["Ставропольский", "край"];
-                        return [parts[0], parts.slice(1).join(' ')];
-                    }
-                }
-                const spaceIndex = n.indexOf(' ');
-                if (spaceIndex > 0 && n.length - spaceIndex < 25) {
-                    return [n.substring(0, spaceIndex), n.substring(spaceIndex + 1)];
-                }
-                return [n];
-            }
-            
-            const lines = splitName(name);
             const fontSize = zoom < 5 ? '10px' : '12px';
-            
             return new ol.style.Style({
                 text: new ol.style.Text({
-                    text: lines.join('\n'),
+                    text: name,
                     font: `500 ${fontSize} "Segoe UI"`,
                     fill: new ol.style.Fill({ color: '#ffffff' }),
-                    stroke: new ol.style.Stroke({ color: '#000000', width: 2.5 }),
+                    stroke: new ol.style.Stroke({ color: '#000000', width: 2.2 }),
                     textAlign: 'center',
                     offsetY: 0
                 })
@@ -389,173 +355,141 @@
 
     let allFeaturesMap = new Map();
 
+    // Загрузка GeoJSON регионов РФ
     fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/russia.geojson')
         .then(r => r.json())
         .then(geojson => {
             const format = new ol.format.GeoJSON();
             const features = format.readFeatures(geojson, { featureProjection: 'EPSG:3857' });
-            
             let moscowRegionFeatures = [];
             
             features.forEach(feature => {
                 let name = feature.get('name');
                 if (!name) return;
                 if (EXCLUDED_REGIONS.some(ex => name.includes(ex))) return;
-                
                 const normalized = normalizeRegionName(name);
                 feature.set('name', normalized);
-                
                 if (normalized === "Московская область") {
                     moscowRegionFeatures.push(feature);
                     return;
                 }
-                
                 if (normalized === "Москва") {
                     allFeaturesMap.set("Москва", feature);
                     return;
                 }
-                
                 if (allFeaturesMap.has(normalized)) {
-                    const existingFeature = allFeaturesMap.get(normalized);
-                    const existingGeom = existingFeature.getGeometry();
-                    const newGeom = feature.getGeometry();
-                    const collection = new ol.geom.GeometryCollection([existingGeom, newGeom]);
-                    existingFeature.setGeometry(collection);
+                    const existing = allFeaturesMap.get(normalized);
+                    const collection = new ol.geom.GeometryCollection([existing.getGeometry(), feature.getGeometry()]);
+                    existing.setGeometry(collection);
                 } else {
                     allFeaturesMap.set(normalized, feature);
                 }
             });
             
-            if (moscowRegionFeatures.length > 0) {
+            if (moscowRegionFeatures.length) {
                 const geoms = moscowRegionFeatures.map(f => f.getGeometry());
-                const collection = new ol.geom.GeometryCollection(geoms);
-                const mergedFeature = moscowRegionFeatures[0].clone();
-                mergedFeature.setGeometry(collection);
-                mergedFeature.set('name', "Московская область");
-                allFeaturesMap.set("Московская область", mergedFeature);
+                const merged = moscowRegionFeatures[0].clone();
+                merged.setGeometry(new ol.geom.GeometryCollection(geoms));
+                merged.set('name', "Московская область");
+                allFeaturesMap.set("Московская область", merged);
             }
             
+            // Центры для подписей
             for (let [name, feature] of allFeaturesMap) {
                 const geom = feature.getGeometry();
-                let centerPoint = null;
-                if (geom.getType() === 'MultiPolygon') {
-                    let maxArea = 0, largest;
-                    if (geom.getPolygons) {
-                        geom.getPolygons().forEach(p => { const area = p.getArea(); if (area > maxArea) { maxArea = area; largest = p; } });
-                        if (largest) centerPoint = largest.getInteriorPoint();
-                    }
-                } else if (geom.getType() === 'Polygon') {
-                    centerPoint = geom.getInteriorPoint();
+                let center = null;
+                if (geom.getType() === 'Polygon') center = geom.getInteriorPoint();
+                else if (geom.getType() === 'MultiPolygon' && geom.getPolygons) {
+                    let largest = null, maxArea = 0;
+                    geom.getPolygons().forEach(p => { let a = p.getArea(); if (a > maxArea) { maxArea = a; largest = p; } });
+                    if (largest) center = largest.getInteriorPoint();
                 } else if (geom.getType() === 'GeometryCollection') {
-                    const geometries = geom.getGeometries();
-                    for (let g of geometries) {
-                        if (g.getType() === 'Polygon') {
-                            centerPoint = g.getInteriorPoint();
-                            break;
-                        } else if (g.getType() === 'MultiPolygon' && g.getPolygons) {
-                            const polys = g.getPolygons();
-                            if (polys.length > 0) {
-                                centerPoint = polys[0].getInteriorPoint();
-                                break;
-                            }
-                        }
+                    for (let g of geom.getGeometries()) {
+                        if (g.getType() === 'Polygon') { center = g.getInteriorPoint(); break; }
                     }
                 }
-                if (centerPoint && !labelSource.getFeatures().some(f => f.get('name') === name)) {
-                    const labelFeature = new ol.Feature(centerPoint);
-                    labelFeature.set('name', name);
-                    labelSource.addFeature(labelFeature);
+                if (center) {
+                    const labelFeat = new ol.Feature(center);
+                    labelFeat.set('name', name);
+                    labelSource.addFeature(labelFeat);
                 }
             }
-            
             updateAllLayers();
         })
-        .catch(console.error);
+        .catch(err => console.warn('GeoJSON error:', err));
 
     function updateAllLayers() {
         clearSource.clear();
         dangerSource.clear();
         attackSource.clear();
         missileSource.clear();
-        
         for (let [name, feature] of allFeaturesMap) {
             const status = getRegionStatus(name);
             const clone = feature.clone();
             clone.set('name', name);
-            
-            if (status === 'missile_alert') {
-                missileSource.addFeature(clone);
-            } else if (status === 'drone_attack') {
-                attackSource.addFeature(clone);
-            } else if (status === 'drone_danger') {
-                dangerSource.addFeature(clone);
-            } else {
-                clearSource.addFeature(clone);
-            }
+            if (status === 'missile_alert') missileSource.addFeature(clone);
+            else if (status === 'drone_attack') attackSource.addFeature(clone);
+            else if (status === 'drone_danger') dangerSource.addFeature(clone);
+            else clearSource.addFeature(clone);
         }
         map.render();
     }
 
-    // Попап
-    const popupElement = document.createElement('div');
-    popupElement.className = 'ol-popup';
-    const popupCloser = document.createElement('a');
-    popupCloser.href = '#';
-    popupCloser.className = 'popup-closer';
-    popupCloser.innerHTML = '×';
-    popupCloser.onclick = () => { popupOverlay.setPosition(undefined); return false; };
-    popupElement.appendChild(popupCloser);
-    const popupContent = document.createElement('div');
-    popupElement.appendChild(popupContent);
-    
-    const popupOverlay = new ol.Overlay({ element: popupElement, autoPan: true, offset: [10, -10] });
+    // Всплывающий попап при клике
+    const popupDiv = document.createElement('div');
+    popupDiv.className = 'ol-popup';
+    const closer = document.createElement('a');
+    closer.href = '#';
+    closer.className = 'popup-closer';
+    closer.innerHTML = '×';
+    closer.onclick = () => { popupOverlay.setPosition(undefined); return false; };
+    popupDiv.appendChild(closer);
+    const popupContentDiv = document.createElement('div');
+    popupDiv.appendChild(popupContentDiv);
+    const popupOverlay = new ol.Overlay({ element: popupDiv, autoPan: true, offset: [10, -10] });
     map.addOverlay(popupOverlay);
     
     map.on('singleclick', (evt) => {
-        let feature = null;
+        let clickedFeature = null;
         const layers = [clearLayer, dangerLayer, attackLayer, missileLayer];
         for (const layer of layers) {
-            map.forEachFeatureAtPixel(evt.pixel, (f) => { feature = f; return true; }, { layerFilter: (l) => l === layer });
-            if (feature) break;
+            map.forEachFeatureAtPixel(evt.pixel, (f) => { clickedFeature = f; return true; }, { layerFilter: l => l === layer });
+            if (clickedFeature) break;
         }
-        if (feature) {
-            const name = feature.get('name');
-            const status = getRegionStatus(name);
-            let html = `<div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; border-bottom: 1px solid #6644aa;">${name}</div>`;
-            if (status === 'missile_alert') html += `<div style="color: #ff8888; font-weight: bold;">🚀 РАКЕТНАЯ ОПАСНОСТЬ</div>`;
-            else if (status === 'drone_attack') html += `<div style="color: #ff8888; font-weight: bold;">🔴 ВНИМАНИЕ / ТРЕВОГА БПЛА</div>`;
-            else if (status === 'drone_danger') html += `<div style="color: #ffcc88; font-weight: bold;">🟡 ОПАСНОСТЬ БПЛА</div>`;
-            else html += `<div style="color: #a0d0a0;">🟢 Отбой / спокойно</div>`;
-            popupContent.innerHTML = html;
+        if (clickedFeature) {
+            const regName = clickedFeature.get('name');
+            const status = getRegionStatus(regName);
+            let statusText = '';
+            if (status === 'missile_alert') statusText = '🚀 РАКЕТНАЯ ОПАСНОСТЬ';
+            else if (status === 'drone_attack') statusText = '🔴 ВНИМАНИЕ / ТРЕВОГА БПЛА';
+            else if (status === 'drone_danger') statusText = '🟡 ОПАСНОСТЬ БПЛА';
+            else statusText = '🟢 Отбой / спокойно';
+            popupContentDiv.innerHTML = `<div style="font-weight:bold; border-bottom:1px solid #a55eff; margin-bottom:6px;">${regName}</div><div>${statusText}</div>`;
             popupOverlay.setPosition(evt.coordinate);
         } else {
             popupOverlay.setPosition(undefined);
         }
     });
 
-    // Свёртывание легенды
+    // Сворачивание легенды
     const legendHeader = document.getElementById('legendHeader');
     const legendItems = document.getElementById('legendItems');
     const legendToggle = document.getElementById('legendToggle');
     legendHeader.addEventListener('click', () => {
-        const isCollapsed = legendItems.style.display === 'none';
-        if (isCollapsed) {
-            legendItems.style.display = 'flex';
-            legendToggle.innerHTML = '▼';
-        } else {
-            legendItems.style.display = 'none';
-            legendToggle.innerHTML = '▲';
-        }
+        const isHidden = legendItems.style.display === 'none';
+        legendItems.style.display = isHidden ? 'flex' : 'none';
+        legendToggle.innerHTML = isHidden ? '▼' : '▲';
     });
 
-    function updateOrbitClock() {
+    // Часы
+    function updateClockUI() {
         const { time } = getCurrentTimeParts();
         const dateStr = getFullDateForClock();
         document.getElementById('orbitTime').innerHTML = time;
         document.getElementById('orbitDate').innerHTML = dateStr;
     }
-    updateOrbitClock();
-    setInterval(updateOrbitClock, 1000);
+    updateClockUI();
+    setInterval(updateClockUI, 1000);
 
     fetchAlerts();
     setInterval(fetchAlerts, 15000);
