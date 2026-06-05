@@ -203,6 +203,40 @@
 
     const API_URL = 'https://radar-u913.onrender.com/api/statuses?api_key=aa07b7a6f91a71d1d6c77803c93b2ba0d4cd080ade0ce6147e9ff420482bec79';
 
+    // ======================== МАППИНГ СТАТУСОВ ========================
+    // Все возможные статусы от API приводятся к одной из визуальных категорий:
+    // 'missile' - ракетная опасность (бордовый)
+    // 'attack' - тревога БПЛА (красный)
+    // 'danger' - опасность БПЛА (жёлтый)
+    // 'clear' - отбой (серый)
+    function mapStatusToCategory(status) {
+        if (!status || status === 'clear') return 'clear';
+        
+        const lowerStatus = status.toLowerCase();
+        
+        // Ракетные угрозы (любые варианты)
+        if (lowerStatus.includes('missile') || 
+            lowerStatus.includes('rocket') || 
+            lowerStatus === 'ballistic_alert' ||
+            lowerStatus === 'rocket_alert' ||
+            lowerStatus === 'ballistic_missile') {
+            return 'missile';
+        }
+        
+        // Тревога БПЛА (активная атака)
+        if (lowerStatus === 'drone_attack' || lowerStatus === 'uav_attack') {
+            return 'attack';
+        }
+        
+        // Опасность по БПЛА (потенциальная)
+        if (lowerStatus === 'drone_danger' || lowerStatus === 'uav_danger') {
+            return 'danger';
+        }
+        
+        // По умолчанию считаем отбоем
+        return 'clear';
+    }
+
     function normalizeRegionName(inputName) {
         if (!inputName) return inputName;
         let name = inputName.trim();
@@ -245,8 +279,8 @@
         return `${day} ${monthName} ${year}`;
     }
 
-    let regionStatuses = new Map();
-    function getRegionStatus(regionName) {
+    let regionStatuses = new Map(); // хранит категории (missile, attack, danger, clear)
+    function getRegionCategory(regionName) {
         const canon = normalizeRegionName(regionName);
         return regionStatuses.get(canon) || 'clear';
     }
@@ -256,15 +290,23 @@
             const resp = await fetch(API_URL);
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
+            console.log('API response:', data);
+            
             if (data && data.regions) {
-                regionStatuses.clear();
                 for (const [name, info] of Object.entries(data.regions)) {
                     if (EXCLUDED_REGIONS.some(ex => name.toLowerCase().includes(ex.toLowerCase()))) continue;
-                    const status = info.status || 'clear';
+                    const rawStatus = info.status || 'clear';
+                    const category = mapStatusToCategory(rawStatus);
                     const canon = normalizeRegionName(name);
-                    regionStatuses.set(canon, status);
+                    // Обновляем только если категория изменилась
+                    if (regionStatuses.get(canon) !== category) {
+                        regionStatuses.set(canon, category);
+                    }
                 }
+                // Регионы, не пришедшие в ответе, остаются с предыдущей категорией
                 updateAllLayers();
+            } else {
+                console.warn('API response has no "regions" field');
             }
         } catch(e) { console.error('API error:', e); }
     }
@@ -377,12 +419,12 @@
     function updateAllLayers() {
         clearSource.clear(); dangerSource.clear(); attackSource.clear(); missileSource.clear();
         for (let [name, feat] of allFeaturesMap) {
-            const status = getRegionStatus(name);
+            const category = getRegionCategory(name);
             const clone = feat.clone();
             clone.set('name', name);
-            if (status === 'missile_alert') missileSource.addFeature(clone);
-            else if (status === 'drone_attack') attackSource.addFeature(clone);
-            else if (status === 'drone_danger') dangerSource.addFeature(clone);
+            if (category === 'missile') missileSource.addFeature(clone);
+            else if (category === 'attack') attackSource.addFeature(clone);
+            else if (category === 'danger') dangerSource.addFeature(clone);
             else clearSource.addFeature(clone);
         }
         map.render();
@@ -411,20 +453,20 @@
         }
         if (feature) {
             const canon = feature.get('name');
-            const status = getRegionStatus(canon);
+            const category = getRegionCategory(canon);
             const display = getShortName(canon);
             let html = `<div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; border-bottom: 1px solid #555; color: #ffffff;">${display}</div>`;
             let borderColor = '#888';
             let textColor = '#aaa';
-            if (status === 'missile_alert') {
+            if (category === 'missile') {
                 textColor = '#cc3366';
                 borderColor = '#cc3366';
                 html += `<div style="color: ${textColor}; font-weight: bold;"> РАКЕТНАЯ ОПАСНОСТЬ</div>`;
-            } else if (status === 'drone_attack') {
+            } else if (category === 'attack') {
                 textColor = '#cc5533';
                 borderColor = '#cc5533';
                 html += `<div style="color: ${textColor}; font-weight: bold;"> ТРЕВОГА БПЛА</div>`;
-            } else if (status === 'drone_danger') {
+            } else if (category === 'danger') {
                 textColor = '#ccaa44';
                 borderColor = '#ccaa44';
                 html += `<div style="color: ${textColor}; font-weight: bold;"> ОПАСНОСТЬ ПО БПЛА</div>`;
